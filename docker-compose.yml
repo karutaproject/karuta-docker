@@ -1,0 +1,84 @@
+
+version: '3.8'
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: karuta_maria
+    environment:
+      MARIADB_ROOT_PASSWORD: karuta_password-root
+      MARIADB_DATABASE: karuta-backend
+      MARIADB_USER: karuta
+      MARIADB_PASSWORD: karuta_password
+    volumes:
+      - ./db_data:/var/lib/mysql
+    ports:
+      - 3306:3306
+    networks:
+      - karuta_network
+
+  # One-off starting script
+  # Need to be idempotent and select the right database
+  # Once run, keep script somewhere else
+  db-init-backend:
+    image: mariadb:10.11
+    depends_on:
+      - mariadb
+    restart: "no"
+    volumes:
+      - ./init_scripts:/sql
+    command: >
+      sh -c "
+        until mysqladmin ping -h mariadb -u root -pkaruta_password-root --silent; do
+          echo 'Waiting for DB...'; sleep 2;
+        done &&
+        for f in /sql/*.sql; do
+          echo \"Running $$f\";
+          mysql -h mariadb -u root -pkaruta_password-root < \"$$f\";
+        done
+      "
+    networks:
+      - karuta_network
+
+  # Duplicate backend entry if another backed is needed
+  karuta-backend:
+    build:
+      context: ./backend
+      dockerfile: dockerfile
+    container_name: karuta-backend
+    ports:
+      - 8080:8080
+    depends_on:
+      - mariadb
+    environment:
+      CATALINA_OPTS: -Dkaruta.home=/home/karuta/tomcat
+      DATABASE_HOST: mariadb
+      DATABASE_NAME: karuta-backend
+      DATABASE_USER: karuta
+      DATABASE_PASSWORD: karuta_password
+    volumes:
+      - ./conf:/home/karuta/tomcat
+      - ./logs:/usr/local/tomcat/logs
+    networks:
+      - karuta_network
+  
+  karuta-fileserver:
+    build:
+      context: ./fileserver
+      dockerfile: dockerfile
+    container_name: karuta-fileserver
+    ports:
+      - 8081:8080
+    environment:
+      CATALINA_OPTS: -Dkaruta.home=/home/karuta/tomcat
+    volumes:
+      - ./data:/home/karuta/tomcat/karuta-fileserver_data
+      - ./conf:/home/karuta/tomcat
+      - ./logs:/usr/local/tomcat/logs
+    networks:
+      - karuta_network
+
+networks:
+  karuta_network:
+    driver: bridge
+

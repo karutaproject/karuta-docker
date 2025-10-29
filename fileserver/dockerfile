@@ -1,0 +1,38 @@
+
+FROM maven:3.8.6-openjdk-11-slim AS build
+
+LABEL maintainer="myemail"
+
+# Set build arguments for GitHub repository and branch
+ARG GITHUB_REPO=https://github.com/karutaproject/karuta-fileserver.git
+ARG GITHUB_BRANCH=master
+
+# Install git
+RUN apt-get update && apt-get install -y git
+
+WORKDIR /app/source
+RUN git clone --branch ${GITHUB_BRANCH} ${GITHUB_REPO} .
+
+RUN mvn clean package -DskipTests
+
+
+FROM tomcat:9-jre11-slim
+
+#RUN mkdir -p /usr/local/tomcat/bin/
+#RUN mkdir -p /home/karuta/tomcat/karuta-backend/
+#RUN echo 'CATALINA_OPTS="$CATALINA_OPTS -Dkaruta.home=/home/karuta/tomcat/"' >> /usr/local/tomcat/bin/setenv.sh
+#RUN chmod +x /usr/local/tomcat/bin/setenv.sh
+
+COPY --from=build /app/source/target/*.war /usr/local/tomcat/webapps/karuta-fileserver.war
+
+
+# https://github.com/karutaproject/karuta-backend_legacy/releases/download/v2.3.3.0-Tomcat9/karuta-backend-9.war
+# https://github.com/karutaproject/karuta-backend_legacy/releases/download/v2.3.3.0-Tomcat10/karuta-backend-10.war
+
+
+# docker -e CATALINA_OPTS="-Dkaruta=dir" run -v /host/folder:/container/folder
+
+
+EXPOSE 8080
+
+
